@@ -4,27 +4,27 @@ use std::{
     process::Stdio,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use log::{error, info};
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
     select,
 };
-use uuid::Uuid;
 
 /// Get the machine UUID from the DMI table.
-pub(crate) fn get_machine_uuid() -> Result<Uuid> {
+pub(crate) fn get_machine_id() -> Result<String> {
     let mut fd = File::open("/sys/firmware/dmi/entries/1-0/raw")?;
     let mut buf: [u8; 24] = [0u8; 24];
     fd.read_exact(&mut buf)?;
     let buf2: [u8; 16] = buf[8..24].try_into()?;
-    Ok(Uuid::from_bytes(buf2))
+    Ok(buf2.iter().map(|b| format!("{:02x}", b)).collect())
 }
 
 /// Download a file from the given URL and save it to the given path.
-pub(crate) async fn download_file(client: &reqwest::Client, url: &str, path: &str) -> Result<()> {
+pub(crate) async fn download_file(url: &str, path: &str) -> Result<()> {
     info!("Downloading file from {} to {}", url, path);
+    let client = reqwest::Client::new();
     let mut response = client.get(url).send().await?;
     if response.status().is_success() {
         let mut out = File::create(path)?;
@@ -45,11 +45,12 @@ pub(crate) async fn download_file(client: &reqwest::Client, url: &str, path: &st
 }
 
 /// Upload a file to the given URL.
-pub(crate) async fn upload_file(client: &reqwest::Client, url: &str, path: &str) -> Result<()> {
+pub(crate) async fn upload_file(url: &str, path: &str) -> Result<()> {
     info!("Uploading file from {} to {}", path, url);
+    let client = reqwest::Client::new();
     let file = File::open(path)?;
     let req = client
-        .post(url)
+        .put(url)
         .body(tokio::fs::File::from_std(file))
         .send()
         .await?;
@@ -76,6 +77,7 @@ pub(crate) async fn execute_command(cmd: &String, args: Vec<String>) -> Result<i
         .await?
         .code()
     {
+        info!("Command exited with code: {}", code);
         Ok(code)
     } else {
         error!("Failed to execute command: {}", cmd);
