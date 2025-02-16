@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use crate::{
     executor::handle_event,
-    messages::{AgentResponse, ControllerRequest},
+    messages::{AgentResponse, AgentResponsePayload, ControllerRequest},
 };
 use anyhow::Result;
 use futures_util::{SinkExt, StreamExt};
@@ -46,6 +46,19 @@ impl Context {
         };
         self.responder.clone().respond(msg).await
     }
+
+    pub(crate) async fn respond2(&self, ok: bool, payload: AgentResponsePayload) -> () {
+        if let Err(e) = self
+            .respond(Response::Text(AgentResponse {
+                id: self.id,
+                ok,
+                payload,
+            }))
+            .await
+        {
+            warn!("Failed to respond request[id={}]: {}", self.id, e);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -71,7 +84,11 @@ async fn handle_msg(ws_msg: Message, responder: AsyncResponder) -> Result<bool> 
                         request: Request::Text(event_msg),
                         responder,
                     };
-                    handle_event(ctx).await?;
+                    tokio::spawn(async move {
+                        if let Err(e) = handle_event(ctx).await {
+                            error!("Failed to handle event: {}", e);
+                        }
+                    });
                 }
                 Err(err) => {
                     error!("Failed to parse message: {}", err);
@@ -80,7 +97,7 @@ async fn handle_msg(ws_msg: Message, responder: AsyncResponder) -> Result<bool> 
                             AgentResponse {
                                 id: u64::MAX,
                                 ok: false,
-                                payload: crate::messages::AgentResponsePayload::None,
+                                payload: AgentResponsePayload::None,
                             }
                             .to_string(),
                         ))

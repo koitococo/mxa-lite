@@ -1,9 +1,12 @@
 use anyhow::Result;
 use log::warn;
 
-use crate::messages::{AgentResponse, ControllerRequest};
-use crate::net::{Context, Request, Response};
-use crate::utils::{download_file, execute_shell, upload_file};
+use crate::messages::{
+    AgentResponsePayload, CommandExecutionResponse, ControllerRequest,
+    FileOperationResponse,
+};
+use crate::net::{Context, Request};
+use crate::utils::{download_file, execute_shell_with_output, upload_file};
 
 struct FileDownloadUploadTask {
     url: String,
@@ -12,74 +15,42 @@ struct FileDownloadUploadTask {
 
 impl FileDownloadUploadTask {
     async fn handle_download(self, ctx: Context) -> Result<()> {
-        tokio::spawn(async move {
-            if let Err(err) = download_file(&self.url, &self.path).await {
-                warn!(
-                    "Failed to download file from '{}' to '{}': {}",
-                    self.url, self.path, err
-                );
-                if let Err(e) = ctx
-                    .respond(Response::Text(AgentResponse {
-                        id: ctx.id,
-                        ok: false,
-                        payload: crate::messages::AgentResponsePayload::FileOperationResponse(
-                            crate::messages::FileOperationResponse { success: false },
-                        ),
-                    }))
-                    .await
-                {
-                    warn!("Failed to respond to file download: {}", e);
-                }
-            }
-            if let Err(e) = ctx
-                .respond(Response::Text(AgentResponse {
-                    id: ctx.id,
-                    ok: true,
-                    payload: crate::messages::AgentResponsePayload::FileOperationResponse(
-                        crate::messages::FileOperationResponse { success: true },
-                    ),
-                }))
-                .await
-            {
-                warn!("Failed to respond to file download: {}", e);
-            }
-        });
+        if let Err(err) = download_file(&self.url, &self.path).await {
+            warn!(
+                "Failed to download file from '{}' to '{}': {}",
+                self.url, self.path, err
+            );
+            ctx.respond2(
+                false,
+                AgentResponsePayload::FileOperationResponse(FileOperationResponse {
+                    success: false,
+                }),
+            ).await;
+        }
+        ctx.respond2(
+            true,
+            AgentResponsePayload::FileOperationResponse(FileOperationResponse { success: true }),
+        ).await;
         Ok(())
     }
 
     async fn handle_upload(self, ctx: Context) -> Result<()> {
-        tokio::spawn(async move {
-            if let Err(err) = upload_file(&self.url, &self.path).await {
-                warn!(
-                    "Failed to upload file from '{}' to '{}': {}",
-                    self.path, self.url, err
-                );
-                if let Err(e) = ctx
-                    .respond(Response::Text(AgentResponse {
-                        id: ctx.id,
-                        ok: false,
-                        payload: crate::messages::AgentResponsePayload::FileOperationResponse(
-                            crate::messages::FileOperationResponse { success: false },
-                        ),
-                    }))
-                    .await
-                {
-                    warn!("Failed to respond to file upload: {}", e);
-                }
-            }
-            if let Err(e) = ctx
-                .respond(Response::Text(AgentResponse {
-                    id: ctx.id,
-                    ok: true,
-                    payload: crate::messages::AgentResponsePayload::FileOperationResponse(
-                        crate::messages::FileOperationResponse { success: true },
-                    ),
-                }))
-                .await
-            {
-                warn!("Failed to respond to file upload: {}", e);
-            }
-        });
+        if let Err(err) = upload_file(&self.url, &self.path).await {
+            warn!(
+                "Failed to upload file from '{}' to '{}': {}",
+                self.path, self.url, err
+            );
+            ctx.respond2(
+                false,
+                AgentResponsePayload::FileOperationResponse(FileOperationResponse {
+                    success: false
+                },)
+            ).await;
+        }
+        ctx.respond2(
+            true,
+            AgentResponsePayload::FileOperationResponse(FileOperationResponse { success: true },)
+        ).await;
         Ok(())
     }
 }
@@ -90,44 +61,27 @@ struct ExecuteTask {
 
 impl ExecuteTask {
     async fn handle(self, ctx: Context) -> Result<()> {
-        tokio::spawn(async move {
-            match execute_shell(&self.cmd).await {
-                Ok(code) => {
-                    if let Err(e) = ctx
-                        .respond(Response::Text(AgentResponse {
-                            id: ctx.id,
-                            ok: true,
-                            payload:
-                                crate::messages::AgentResponsePayload::CommandExecutionResponse(
-                                    crate::messages::CommandExecutionResponse {
-                                        code,
-                                        output: "".to_string(),
-                                    },
-                                ),
-                        }))
-                        .await
-                    {
-                        warn!("Failed to respond to command execution: {}", e);
-                    }
-                }
-                Err(err) => {
-                    warn!("Failed to execute command {}: {}", self.cmd, err);
-                    if let Err(e) = ctx.respond(Response::Text(AgentResponse {
-                        id: ctx.id,
-                        ok: false,
-                        payload: crate::messages::AgentResponsePayload::CommandExecutionResponse(
-                            crate::messages::CommandExecutionResponse {
-                                code: -1,
-                                output: "".to_string(),
-                            },
-                        ),
-                    }))
-                    .await {
-                        warn!("Failed to respond to command execution: {}", e);
-                    }
-                }
+        match execute_shell_with_output(&self.cmd).await {
+            Ok((code, output)) => {
+                ctx.respond2(
+                    true,
+                    AgentResponsePayload::CommandExecutionResponse(CommandExecutionResponse {
+                        code,
+                        output: output,
+                    },)
+                ).await;
             }
-        });
+            Err(err) => {
+                warn!("Failed to execute command {}: {}", self.cmd, err);
+                ctx.respond2(
+                    false,
+                    AgentResponsePayload::CommandExecutionResponse(CommandExecutionResponse {
+                        code: -1,
+                        output: "".to_string(),
+                    },)
+                ).await;
+            }
+        }
         Ok(())
     }
 }
@@ -193,7 +147,7 @@ pub(crate) async fn handle_event(ctx: Context) -> Result<()> {
         Ok(task) => task.handle(ctx).await,
         Err(_) => {
             warn!("Received an invalid task: {:?}", ctx.request);
-            Ok(())
+            Err(anyhow::anyhow!("Invalid task"))
         }
     }
 }
