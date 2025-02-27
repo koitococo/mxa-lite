@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::warn;
+use log::{trace, warn};
 
 use crate::messages::{
     AgentResponsePayload, CommandExecutionResponse, ControllerRequest,
@@ -62,12 +62,14 @@ struct ExecuteTask {
 impl ExecuteTask {
     async fn handle(self, ctx: Context) -> Result<()> {
         match execute_shell_with_output(&self.cmd).await {
-            Ok((code, output)) => {
+            Ok((code, stdout,stderr)) => {
+                trace!("Command '{}' executed with code {}: {} {}", self.cmd, code, stdout, stderr);
                 ctx.respond2(
                     true,
                     AgentResponsePayload::CommandExecutionResponse(CommandExecutionResponse {
                         code,
-                        output: output,
+                        stdout,
+                        stderr,
                     },)
                 ).await;
             }
@@ -77,7 +79,8 @@ impl ExecuteTask {
                     false,
                     AgentResponsePayload::CommandExecutionResponse(CommandExecutionResponse {
                         code: -1,
-                        output: "".to_string(),
+                        stdout: "".to_string(),
+                        stderr: err.to_string(),
                     },)
                 ).await;
             }

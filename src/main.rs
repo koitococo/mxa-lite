@@ -22,13 +22,13 @@ async fn main() {
                 eprintln!(
                     "[Debug] Failed to get machine id, use 'cafecafecafecafecafecafecafecafe' instead",
                 );
-                "debug".to_string()
+                "cafecafecafecafecafecafecafecafe".to_string()
             } else {
                 std::process::exit(1);
             }
         }
     };
-    let ws_url = std::env::var("WS_URL").unwrap_or("ws://controller:8080/ws".to_string());
+    let ws_url = std::env::var("WS_URL").unwrap_or("ws://localhost:8080/ws".to_string());
     loop {
         if let Err(err) = net::agent_main(ws_url.clone(), host_id.clone()).await {
             error!("Agent failed: {}", err);

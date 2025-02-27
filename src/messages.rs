@@ -10,11 +10,12 @@ pub struct CommandExecutionRequest {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CommandExecutionResponse {
     pub code: i32,
-    pub output: String,
+    pub stdout: String,
+    pub stderr: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+// #[serde(tag = "type")]
 pub enum FileOperation {
     Download,
     Upload,
@@ -33,7 +34,7 @@ pub struct FileOperationResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+// #[serde(tag = "type")]
 pub enum ControllerRequestPayload {
     // None,
     CommandExecutionRequest(CommandExecutionRequest),
@@ -48,7 +49,7 @@ pub struct ControllerRequest {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type")]
+// #[serde(tag = "type")]
 pub enum AgentResponsePayload {
     None,
     CommandExecutionResponse(CommandExecutionResponse),

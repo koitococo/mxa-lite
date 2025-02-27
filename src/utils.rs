@@ -4,13 +4,11 @@ use std::{
     process::Stdio,
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use log::{error, info};
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::Command,
-    select,
-};
+use tokio::
+    process::Command
+;
 
 /// Get the machine UUID from the DMI table.
 pub(crate) fn get_machine_id() -> Result<String> {
@@ -65,93 +63,26 @@ pub(crate) async fn upload_file(url: &str, path: &str) -> Result<()> {
     }
 }
 
-// /// Execute an external command. Ignore **ALL** stdio.
-// pub(crate) async fn execute_command(cmd: &String, args: Vec<String>) -> Result<i32> {
-//     info!("Executing external command: {} {:?}", cmd, args);
-//     if let Some(code) = Command::new(cmd)
-//         .args(args)
-//         .stdin(Stdio::null())
-//         .stdout(Stdio::null())
-//         .stderr(Stdio::null())
-//         .status()
-//         .await?
-//         .code()
-//     {
-//         info!("Command exited with code: {}", code);
-//         Ok(code)
-//     } else {
-//         error!("Failed to execute command: {}", cmd);
-//         anyhow::bail!("Failed to execute command: {}", cmd);
-//     }
-// }
-
-// /// Execute a command with sh wrapped. Ignore **ALL** stdio.
-// pub(crate) async fn execute_shell(cmd: &String) -> Result<i32> {
-//     execute_command(&("sh".to_string()), vec!["-c".to_string(), cmd.to_string()]).await
-// }
-
-/// Execute an external command and print its output.
-pub(crate) async fn execute_command_with_callback(
+/// Execute an external command and return its output.
+pub(crate) async fn execute_command_with_output<'a>(
     cmd: &String,
     args: Vec<String>,
-    mut callback: Box<dyn FnMut(String) + Send>,
-) -> Result<i32> {
+) -> Result<(i32, String, String)> {
     info!("Executing external command: {} {:?}", cmd, args);
-    let mut child = Command::new(cmd)
+    let child = Command::new(cmd)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow!("Failed to open stdout"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow!("Failed to open stderr"))?;
-    let mut stdout_reader = BufReader::new(stdout).lines();
-    let mut stderr_reader = BufReader::new(stderr).lines();
-
-    loop {
-        select! {
-            line = stdout_reader.next_line() => {
-                let line = line?;
-                if let Some(line) = line {
-                    callback(line);
-                } else {
-                    break;
-                }
-            },
-            line = stderr_reader.next_line() => {
-                let line = line?;
-                if let Some(line) = line {
-                    callback(line);
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-
-    Ok(child.wait().await?.code().unwrap_or(-1))
+    let output = child.wait_with_output().await?;
+    Ok((
+        output.status.code().unwrap_or(-1),
+        String::from_utf8(output.stdout)?,
+        String::from_utf8(output.stderr)?,
+    ))
 }
 
-/// Execute an external command and return its output.
-pub(crate) async fn execute_command_with_output<'a>(
-    cmd: &String,
-    args: Vec<String>,
-) -> Result<(i32, String)> {
-    let mut buffer = Box::new(Vec::<String>::new());
-    let outputs = buffer.clone();
-    let cb = Box::new(move |output: String| {
-        buffer.push(output);
-    });
-    let exit_code = execute_command_with_callback(cmd, args, cb).await?;
-    Ok((exit_code, outputs.join("\n")))
-}
-
-pub(crate) async fn execute_shell_with_output<'a>(cmd: &String) -> Result<(i32, String)> {
+pub(crate) async fn execute_shell_with_output<'a>(cmd: &String) -> Result<(i32, String, String)> {
     execute_command_with_output(&("sh".to_string()), vec!["-c".to_string(), cmd.to_string()]).await
 }

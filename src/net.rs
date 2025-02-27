@@ -161,7 +161,7 @@ async fn handle_conn(
 
 pub(crate) async fn agent_main(ws_url: String, host_id: String) -> Result<()> {
     info!("Use Controller URL: {}", ws_url);
-    let ws_url = format!("{}/?host_id={}", ws_url, host_id);
+    let ws_url = format!("{}?host_id={}", ws_url, host_id);
     loop {
         let ws_url = ws_url.clone();
         info!("Connecting to controller websocket: {}", ws_url);
