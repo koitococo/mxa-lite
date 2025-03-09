@@ -6,9 +6,7 @@ use std::{
 
 use anyhow::Result;
 use log::{error, info};
-use tokio::
-    process::Command
-;
+use tokio::process::Command;
 
 /// Get the machine UUID from the DMI table.
 pub(crate) fn get_machine_id() -> Result<String> {

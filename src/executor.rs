@@ -2,8 +2,7 @@ use anyhow::Result;
 use log::{trace, warn};
 
 use crate::messages::{
-    AgentResponsePayload, CommandExecutionResponse, ControllerRequest,
-    FileOperationResponse,
+    AgentResponsePayload, CommandExecutionResponse, ControllerRequest, FileOperationResponse,
 };
 use crate::net::{Context, Request};
 use crate::utils::{download_file, execute_shell_with_output, upload_file};
@@ -25,12 +24,14 @@ impl FileDownloadUploadTask {
                 AgentResponsePayload::FileOperationResponse(FileOperationResponse {
                     success: false,
                 }),
-            ).await;
+            )
+            .await;
         }
         ctx.respond2(
             true,
             AgentResponsePayload::FileOperationResponse(FileOperationResponse { success: true }),
-        ).await;
+        )
+        .await;
         Ok(())
     }
 
@@ -43,14 +44,16 @@ impl FileDownloadUploadTask {
             ctx.respond2(
                 false,
                 AgentResponsePayload::FileOperationResponse(FileOperationResponse {
-                    success: false
-                },)
-            ).await;
+                    success: false,
+                }),
+            )
+            .await;
         }
         ctx.respond2(
             true,
-            AgentResponsePayload::FileOperationResponse(FileOperationResponse { success: true },)
-        ).await;
+            AgentResponsePayload::FileOperationResponse(FileOperationResponse { success: true }),
+        )
+        .await;
         Ok(())
     }
 }
@@ -62,16 +65,20 @@ struct ExecuteTask {
 impl ExecuteTask {
     async fn handle(self, ctx: Context) -> Result<()> {
         match execute_shell_with_output(&self.cmd).await {
-            Ok((code, stdout,stderr)) => {
-                trace!("Command '{}' executed with code {}: {} {}", self.cmd, code, stdout, stderr);
+            Ok((code, stdout, stderr)) => {
+                trace!(
+                    "Command '{}' executed with code {}: {} {}",
+                    self.cmd, code, stdout, stderr
+                );
                 ctx.respond2(
                     true,
                     AgentResponsePayload::CommandExecutionResponse(CommandExecutionResponse {
                         code,
                         stdout,
                         stderr,
-                    },)
-                ).await;
+                    }),
+                )
+                .await;
             }
             Err(err) => {
                 warn!("Failed to execute command {}: {}", self.cmd, err);
@@ -81,8 +88,9 @@ impl ExecuteTask {
                         code: -1,
                         stdout: "".to_string(),
                         stderr: err.to_string(),
-                    },)
-                ).await;
+                    }),
+                )
+                .await;
             }
         }
         Ok(())

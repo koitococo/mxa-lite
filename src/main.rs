@@ -1,9 +1,11 @@
-use log::{error, info};
+use discovery::discover_controller;
+use log::{error, info, warn};
 
+mod discovery;
 mod executor;
+mod messages;
 mod net;
 mod utils;
-mod messages;
 
 #[tokio::main]
 async fn main() {
@@ -28,7 +30,24 @@ async fn main() {
             }
         }
     };
-    let ws_url = std::env::var("WS_URL").unwrap_or("ws://localhost:8080/ws".to_string());
+    let ws_url = match std::env::var("WS_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            let controllers = match discover_controller().await {
+                Ok(c) => c,
+                Err(err) => {
+                    error!("Failed to discover controller: {}", err);
+                    std::process::exit(1);
+                }
+            };
+            if controllers.is_empty() {
+                warn!("No controller discovered");
+                "ws://controller.local:8080/ws".to_string()
+            } else {
+                controllers[0].clone()
+            }
+        }
+    };
     loop {
         if let Err(err) = net::agent_main(ws_url.clone(), host_id.clone()).await {
             error!("Agent failed: {}", err);
